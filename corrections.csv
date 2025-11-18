@@ -1,0 +1,34 @@
+timestamp,description,pred_family,pred_category1,pred_confidence,correct_family,correct_category1
+2025-09-15T22:38:06.899763,tool box,MRO,Industrial Chemicals,0.9000,MRO,General Mill Supplies (GMS)
+2025-09-15T23:10:35.040930,soap dispenser,MRO,JanSan Supplies,0.9000,Business Solutions,Washroom & Breakroom
+2025-09-15T23:17:05.930100,syringe packs,MRO,JanSan Supplies,0.9000,Agriculture,Lab Supplies
+2025-09-15T23:18:07.157766,paper towel,MRO,JanSan Supplies,0.9000,Business Solutions,Washroom & Breakroom
+2025-09-15T23:19:27.135610,air filters,MRO,JanSan Supplies,0.9000,MRO,General Mill Supplies (GMS)
+2025-09-15T23:20:31.024614,12oz cups,MRO,Bearings & Power Trans. (BPT),0.9000,Business Solutions,Washroom & Breakroom
+2025-09-15T23:20:52.319228,foam cups,MRO,JanSan Supplies,0.9000,Business Solutions,Washroom & Breakroom
+2025-09-15T23:22:10.843653,foam cups,MRO,JanSan Supplies,0.9000,Business Solutions,Washroom & Breakroom
+2025-09-15T23:24:46.392655,pad lock,MRO,Safety & PPE Supplies,0.9000,MRO,General Mill Supplies (GMS)
+2025-09-16T13:23:10.194630,coveralls,MRO,JanSan Supplies,0.9000,MRO,Safety & PPE Supplies
+2025-09-16T13:35:53.682387,"10' x 3/4 EMT, 12 ct",MRO,General Mill Supplies (GMS),0.9000,MRO,Electrical & Lighting Supplies
+2025-09-16T13:36:52.638255,10ft - 1/2 inch Cord Protector Wire Loom Tubing Cable Sleeve Split Sleeving For USB Cable,MRO,Safety & PPE Supplies,0.9000,MRO,Electrical & Lighting Supplies
+2025-09-16T13:38:21.134946,150 Watts LED Work Light Fixture,MRO,General Mill Supplies (GMS),0.9000,MRO,Electrical & Lighting Supplies
+2025-09-16T13:39:30.336036,2'x4' lay in LED light,MRO,General Mill Supplies (GMS),0.9000,MRO,Electrical & Lighting Supplies
+2025-09-16T15:26:47.805503,Pulley,MRO,General Mill Supplies (GMS),0.9000,MRO,Bearings & Power Trans. (BPT)
+2025-09-16T15:30:45.989565,2 BOLT FLANGE BEARING RADIAL BALL,MRO,General Mill Supplies (GMS),0.9000,MRO,Bearings & Power Trans. (BPT)
+2025-09-16T15:31:18.715583,20x58 Belt,MRO,General Mill Supplies (GMS),0.9000,MRO,Bearings & Power Trans. (BPT)
+2025-09-16T15:32:01.208974,2204-2RS BEARING,MRO,General Mill Supplies (GMS),0.9000,MRO,Bearings & Power Trans. (BPT)
+2025-09-16T15:32:28.634057,25hp motor,MRO,Electrical & Lighting Supplies,0.9000,MRO,Motors
+2025-09-16T15:38:02.284711,3/4 hp motors,MRO,Electrical & Lighting Supplies,0.9000,MRO,Motors
+2025-09-16T15:38:46.653754,4 bolt flange bearing,MRO,General Mill Supplies (GMS),0.9000,MRO,Bearings & Power Trans. (BPT)
+2025-09-16T16:09:06.313330,A-146 power drive belt,MRO,General Mill Supplies (GMS),0.9000,MRO,Bearings & Power Trans. (BPT)
+2025-09-16T16:10:22.537836,A36 V-Belt,MRO,Industrial Chemicals,0.9000,MRO,Bearings & Power Trans. (BPT)
+2025-09-16T16:10:58.975052,baldor .75 HP motor,MRO,Electrical & Lighting Supplies,0.9000,MRO,Motors
+2025-09-16T16:11:22.492327,Ball bearing SS 42x20,MRO,General Mill Supplies (GMS),0.9000,MRO,Bearings & Power Trans. (BPT)
+2025-09-16T16:12:35.124110,BEARING & SHAFT,MRO,General Mill Supplies (GMS),0.9000,MRO,Bearings & Power Trans. (BPT)
+2025-09-17T14:04:25.952460,4XL lab Coats,Packaging,Flexible Films & Bags,0.3990,MRO,Safety & PPE Supplies
+2025-09-17T14:09:03.757449,Plastic Ziplock Bags 12X12,Packaging,Flexible Films & Bags,0.5430,Business Solutions,Washroom & Breakroom
+2025-09-17T22:30:06.783246,scissor lift rental,Facilities,Equipment Maintenance,0.8500,Facilities,Forklifts
+2025-09-18T13:32:38.476486,"1/4""x1/4"" pipe fittings",MRO,Electrical & Lighting Supplies,0.9000,MRO,"Pipes, Valves, Fittings (PVF)"
+2025-09-18T16:56:41.763222,Trash bags - White (33 gal) (Cases),Packaging,Flexible Films & Bags,0.9000,Business Solutions,Washroom & Breakroom
+2025-09-18T17:02:51.325453,case of 12 dasani water,MRO,JanSan Supplies,0.8500,Business Solutions,Office Supplies & Furniture
+2025-09-18T23:39:55.271431,medline IV syringe needles 100/box,MRO,Electrical & Lighting Supplies,0.8500,Agriculture,Lab Supplies

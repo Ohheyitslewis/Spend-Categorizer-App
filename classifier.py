@@ -5,7 +5,9 @@ from pathlib import Path
 from typing import Dict, List
 
 from pydantic import BaseModel, Field, ValidationError
-from ollama import Client
+from groq import Groq
+import streamlit as st
+
 import difflib
 import pickle
 import numpy as np

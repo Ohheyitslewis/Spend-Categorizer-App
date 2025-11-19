@@ -90,26 +90,41 @@ def top_k_examples(query: str, k: int = 5):
 # =====================================================
 #  Retrieval-based Confidence
 # =====================================================
-def retrieval_confidence_for(query: str, family: str, category: str):
-    try:
-        idx = load_examples_index()
-        model = get_embed_model(idx["model_name"])
-        qv = model.encode([query], normalize_embeddings=True)[0]
-        sims = np.dot(idx["embeddings"], qv)
+def compute_retrieval_conf_from_row(sim_row: np.ndarray, idx) -> tuple[str, str, float]:
+    """
+    Given one row of similarities (item vs all examples), compute:
+      - the best (family, category) pair
+      - a confidence in [0,1] based on similarity + margin.
+    """
+    best_by_pair: dict[tuple[str, str], float] = {}
 
-        best_by_pair = {}
-        for i, s in enumerate(sims):
-            key = (idx["families"][i], idx["categories"][i])
-            best_by_pair[key] = max(best_by_pair.get(key, -1), s)
+    families = idx["families"]
+    categories = idx["categories"]
 
-        pred = best_by_pair.get((family, category), 0)
-        alt = max([v for k, v in best_by_pair.items() if k != (family, category)], default=0)
+    for j, s in enumerate(sim_row):
+        key = (families[j], categories[j])
+        s = float(s)
+        if key not in best_by_pair or s > best_by_pair[key]:
+            best_by_pair[key] = s
 
-        margin = max(0.0, pred - alt)
-        confidence = 0.55 * pred + 0.45 * margin
-        return float(max(0, min(1, confidence)))
-    except Exception:
-        return None
+    # If somehow no data, fall back
+    if not best_by_pair:
+        return "Unclassified", "Unclassified", 0.0
+
+    # Best pair and its similarity
+    (best_pair, pred_sim) = max(best_by_pair.items(), key=lambda kv: kv[1])
+    fam, cat = best_pair
+
+    # Next-best alternative similarity
+    others = [v for k, v in best_by_pair.items() if k != best_pair]
+    alt_sim = max(others) if others else 0.0
+
+    margin = max(0.0, pred_sim - alt_sim)
+    conf = 0.55 * pred_sim + 0.45 * margin
+    conf = max(0.0, min(1.0, conf))  # clamp to [0,1]
+
+    return fam, cat, conf
+
 
 
 # =====================================================
@@ -129,7 +144,7 @@ def classify_by_retrieval_only(
         best = examples[0]
         fam, cat = best["family"], best["category1"]
 
-        conf = retrieval_confidence_for(item_description, fam, cat)
+        conf = compute_retrieval_conf_from_row(item_description, fam, cat)
         if conf is None or conf < min_confidence:
             return None
 
@@ -215,33 +230,128 @@ def classify_with_ollama(
 def classify_batch_items(
     items: List[str],
     taxonomy: Dict[str, List[str]],
-    use_examples: bool = False,
+    model_name: str = "llama-3.1-8b-instant",
+    min_confidence: float = 0.75,
 ) -> List[Classification]:
     """
-    Simple batch: reuse the single-item pipeline for each line.
-    - retrieval-only first
-    - LLM fallback if needed
-    - no fragile JSON list parsing
+    TRUE batch classifier:
+      1) Do a single batched embedding call for ALL items.
+      2) Use nearest neighbor in examples_index.pkl for fast retrieval.
+      3) Only send 'hard' / low-similarity items to the Groq LLM in batches.
     """
-    results: List[Classification] = []
-    for text in items:
+
+    # ------------------------------------------------------------------
+    # 1) Load index + model, and batch-embed ALL item descriptions
+    # ------------------------------------------------------------------
+    idx = load_examples_index()
+    model = get_embed_model(idx["model_name"])
+
+    # Encode all items at once → HUGE speedup vs per-item encode
+    query_vecs = model.encode(items, normalize_embeddings=True)   # shape (N, D)
+    emb = idx["embeddings"]                                      # shape (M, D)
+
+    # Cosine similarity for all queries vs all examples in one go
+    # sims[i, j] = similarity(item i, example j)
+    sims = np.dot(query_vecs, emb.T)                             # shape (N, M)
+
+    retrieval_results: List[Classification | None] = [None] * len(items)
+    hard_items: List[str] = []
+    hard_indices: List[int] = []
+
+    # ------------------------------------------------------------------
+    # 2) Retrieval-only pass using the batched similarities
+    # ------------------------------------------------------------------
+    for i, desc in enumerate(items):
+        sim_row = sims[i]  # similarities to all examples for this item
+
+    fam, cat, conf = compute_retrieval_conf_from_row(sim_row, idx)
+
+    if conf >= min_confidence:
+        retrieval_results[i] = Classification(
+            family=fam,
+            category1=cat,
+            confidence=conf,
+            rationale="retrieval batch match",
+        )
+    else:
+        hard_items.append(desc)
+        hard_indices.append(i)
+
+    # If everything was easy → no LLM calls at all 🎉
+    if not hard_items:
+        return retrieval_results  # type: ignore[return-value]
+
+    # ------------------------------------------------------------------
+    # 3) LLM fallback for hard items (still batched)
+    # ------------------------------------------------------------------
+    BATCH_SIZE = 50
+    llm_results: List[Classification] = []
+
+    for i in range(0, len(hard_items), BATCH_SIZE):
+        batch = hard_items[i:i + BATCH_SIZE]
+
+        system_prompt = (
+            "You classify purchasing item descriptions.\n"
+            "Choose exactly ONE Family and ONE Category from this taxonomy:\n\n"
+            + "\n".join([f"- {f}: {', '.join(cats)}" for f, cats in taxonomy.items()])
+            + "\n\nReturn a JSON list, one object per line item, "
+              "with keys: family, category1, confidence."
+        )
+
+        items_text = "\n".join([f"{j+1}. {t}" for j, t in enumerate(batch)])
+
+        user_prompt = (
+            "Classify EACH line item below.\n\n"
+            f"{items_text}\n\n"
+            "Return ONLY a JSON list of objects, in the same order."
+        )
+
+        resp = groq_client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.1,
+        )
+
+        raw = resp.choices[0].message.content
+
         try:
-            res = classify_with_ollama(
-                text,
-                taxonomy,
-                include_rationale=False,   # no rationale in batch
-                use_examples=use_examples,
-            )
+            start = raw.find("[")
+            end = raw.rfind("]")
+            parsed_list = json.loads(raw[start:end+1])
         except Exception:
-            # super-safe fallback
-            res = Classification(
-                family="Unclassified",
-                category1="Unclassified",
-                confidence=0.0,
-                rationale="Batch fallback error",
+            # If parsing fails, mark everything in this batch as Unclassified
+            parsed_list = [
+                {"family": "Unclassified", "category1": "Unclassified", "confidence": 0.0}
+                for _ in batch
+            ]
+
+        for obj in parsed_list:
+            fam = obj.get("family", "Unclassified")
+            cat = obj.get("category1", obj.get("category", "Unclassified"))
+            conf = float(obj.get("confidence", 0.0))
+            llm_results.append(
+                Classification(
+                    family=fam,
+                    category1=cat,
+                    confidence=conf,
+                    rationale="LLM batch fallback",
+                )
             )
-        results.append(res)
-    return results
+
+    # ------------------------------------------------------------------
+    # 4) Merge LLM results back into the retrieval_results array
+    # ------------------------------------------------------------------
+    llm_i = 0
+    for idx_i in hard_indices:
+        retrieval_results[idx_i] = llm_results[llm_i]
+        llm_i += 1
+
+    # At this point, everything is filled in
+    return retrieval_results  # type: ignore[return-value]
+
 
 
 

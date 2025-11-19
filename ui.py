@@ -226,4 +226,4 @@ with tab_batch:
 
             st.markdown('<div class="card">', unsafe_allow_html=True)
             st.subheader("Results")
-            st.dataframe(df, use_container_width
+            st.dataframe(df, use_container_width)

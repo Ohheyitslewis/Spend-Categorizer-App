@@ -13,6 +13,7 @@ import pickle
 import numpy as np
 from sentence_transformers import SentenceTransformer
 import re  # NEW
+groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 def _normalize_confidence(val):
     """
@@ -273,17 +274,18 @@ def classify_with_ollama(
         f"Return strict JSON with keys exactly: {want_keys}. {confidence_rule}"
     )
 
-    client = Client()  # defaults to http://localhost:11434
-    response = client.chat(
-        model=model_name,
+    # 🔹 Groq call – no more `client = Client()` anywhere
+    response = groq_client.chat.completions.create(
+        model="llama-3.1-8b-instant",  # Groq's Llama 3 70B model
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        options={"temperature": 0.1}
+        temperature=0.1,
     )
 
-    content = response["message"]["content"]
+    # Groq returns an OpenAI-style response
+    content = response.choices[0].message.content
     start = content.find("{")
     end = content.rfind("}")
     if start == -1 or end == -1:
@@ -291,7 +293,7 @@ def classify_with_ollama(
             family="Unclassified",
             category1="Unclassified",
             confidence=0.0,
-            rationale=f"Model did not return JSON: {content[:200]}"
+            rationale=f"Model did not return JSON: {content[:200]}",
         )
 
     import json as _json
@@ -302,7 +304,7 @@ def classify_with_ollama(
             family="Unclassified",
             category1="Unclassified",
             confidence=0.0,
-            rationale=f"JSON parse error: {e}; content: {content[:200]}"
+            rationale=f"JSON parse error: {e}; content: {content[:200]}",
         )
 
     fam = parsed.get("family") or parsed.get("Family") or "Unclassified"

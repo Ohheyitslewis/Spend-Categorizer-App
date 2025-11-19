@@ -249,7 +249,13 @@ with tab_single:
         else:
             with st.spinner("Thinking…"):
                 try:
-                    res: Classification = classify_with_ollama(desc.strip(), taxonomy, model_name=model_name)
+                    res: Classification = classify_with_ollama(
+                        desc.strip(),
+                        taxonomy,
+                        model_name=model_name,
+                        include_rationale=True,
+                        use_examples=True,
+                    )
                     st.session_state.last_desc = desc.strip()
                     st.session_state.last_pred = res
                 except Exception as e:
@@ -309,7 +315,7 @@ with tab_single:
             msg = "Saved to training_examples.csv."
             if auto_rebuild:
                 ok, info = rebuild_examples_index()
-                msg += f" {info}"
+                msg += f" {info}"""
             st.success(msg)
 
         if cN.button("❌ No — correct it", use_container_width=True):
@@ -386,6 +392,7 @@ with tab_batch:
                             taxonomy,
                             model_name=model_name,
                             include_rationale=False,   # ← omit rationale in batch
+                            use_examples=False,        # ← don't include examples in LLM prompt for batch
                         )
                         rows.append({
                             "description": text,
@@ -420,6 +427,7 @@ with tab_batch:
                     st.markdown("</div>", unsafe_allow_html=True)
                 except Exception as e:
                     st.error(f"Error while classifying batch: {e}")
+
 
 
 

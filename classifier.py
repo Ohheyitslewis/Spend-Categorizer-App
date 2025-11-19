@@ -65,6 +65,45 @@ def retrieval_confidence_for(query: str, pred_family: str, pred_category: str):
         return max(0.0, min(1.0, conf))
     except Exception:
         return None
+def classify_by_retrieval_only(
+    item_description: str,
+    taxonomy: Dict[str, List[str]],
+    min_confidence: float = 0.75,
+) -> Classification | None:
+    """
+    Fast path: use nearest-neighbor retrieval only (no LLM call).
+    Returns a Classification if we're confident enough, otherwise None.
+    """
+    try:
+        # Get the single closest example from your index
+        examples = top_k_examples(item_description, k=1)
+        if not examples:
+            return None
+
+        best = examples[0]
+        fam = best["family"]
+        cat = best["category1"]
+
+        # Compute a confidence score based on similarity margins
+        conf = retrieval_confidence_for(item_description, fam, cat)
+        if conf is None or conf < min_confidence:
+            return None  # not confident enough, let LLM handle it
+
+        raw = Classification(
+            family=fam,
+            category1=cat,
+            confidence=conf,
+            rationale="Nearest-neighbor retrieval-only classification.",
+        )
+
+        # Snap to your taxonomy just like LLM outputs
+        try:
+            return normalize_prediction(raw, taxonomy)
+        except Exception:
+            return raw
+    except Exception:
+        return None
+
 
 
 class Classification(BaseModel):
@@ -232,35 +271,32 @@ def classify_with_ollama(
     taxonomy: Dict[str, List[str]],
     model_name: str = "llama3",
     include_rationale: bool = True,
+    use_examples: bool = True,
 ) -> Classification:
+    # Build system prompt once per call
     system_prompt = build_system_prompt(taxonomy)
 
-    # Retrieve similar labeled examples (top 4)
+    # 1) Fast path: try retrieval-only classification first (no LLM call)
+    fast = classify_by_retrieval_only(item_description, taxonomy, min_confidence=0.75)
+    if fast is not None:
+        # In batch mode, we often don't want a long rationale
+        if not include_rationale:
+            fast.rationale = ""
+        return fast
+
+    # 2) (Optional) Retrieve similar labeled examples to show the LLM
     examples_text = "No close examples found; rely on taxonomy."
-    try:
-        examples = top_k_examples(item_description, k=4)  # ↓ fewer examples
-        if examples:
-            # Fast path: snap to nearest if extremely similar
-            best = examples[0]
-            if best.get("similarity", 0.0) >= 0.92:
-                raw = Classification(
-                    family=best["family"],
-                    category1=best["category1"],
-                    confidence=0.95,
-                    rationale="Nearest-neighbor match."
-                )
-                try:
-                    return normalize_prediction(raw, taxonomy)
-                except Exception:
-                    return raw
+    if use_examples:
+        try:
+            examples = top_k_examples(item_description, k=4)
+            if examples:
+                # Here we only use examples as guidance, not as an early-return
+                filtered = [e for e in examples if e.get("similarity", 0.0) >= 0.60] or examples
+                examples_text = format_examples_for_prompt(filtered)
+        except Exception:
+            pass
 
-            # Otherwise include top examples (threshold optional)
-            filtered = [e for e in examples if e.get("similarity", 0.0) >= 0.60] or examples
-            examples_text = format_examples_for_prompt(filtered)
-    except Exception:
-        pass
-
-    # Build user prompt; optionally omit rationale to save tokens
+    # 3) Build user prompt; optionally omit rationale to save tokens
     if include_rationale:
         want_keys = "family, category1, confidence, rationale"
         confidence_rule = "For confidence, return a NUMBER between 0 and 1 (e.g., 0.73)."
@@ -274,9 +310,9 @@ def classify_with_ollama(
         f"Return strict JSON with keys exactly: {want_keys}. {confidence_rule}"
     )
 
-    # 🔹 Groq call – no more `client = Client()` anywhere
+    # 4) Groq call
     response = groq_client.chat.completions.create(
-        model="llama-3.1-8b-instant",  # Groq's Llama 3 70B model
+        model="llama-3.1-8b-instant",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -284,7 +320,7 @@ def classify_with_ollama(
         temperature=0.1,
     )
 
-    # Groq returns an OpenAI-style response
+    # 5) Parse JSON-ish response
     content = response.choices[0].message.content
     start = content.find("{")
     end = content.rfind("}")
@@ -326,6 +362,7 @@ def classify_with_ollama(
         return normalize_prediction(raw, taxonomy)
     except Exception:
         return raw
+
 
 
 

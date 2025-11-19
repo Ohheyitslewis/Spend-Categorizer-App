@@ -231,7 +231,7 @@ def classify_batch_items(
     items: List[str],
     taxonomy: Dict[str, List[str]],
     model_name: str = "llama-3.1-8b-instant",
-    min_confidence: float = 0.75,
+    min_confidence: float = 0.6,
 ) -> List[Classification]:
     """
     TRUE batch classifier:
@@ -284,26 +284,31 @@ def classify_batch_items(
     # 2) LLM fallback for "hard" items (batched)
     # ------------------------------------------------------------------
     if hard_items:
-        BATCH_SIZE = 50
+        BATCH_SIZE = 10
         llm_results: List[Classification] = []
 
         for i in range(0, len(hard_items), BATCH_SIZE):
             batch = hard_items[i:i + BATCH_SIZE]
 
             system_prompt = (
-                "You classify purchasing item descriptions.\n"
-                "Choose exactly ONE Family and ONE Category from this taxonomy:\n\n"
+             "You classify purchasing item descriptions.\n"
+             "Choose exactly ONE Family and ONE Category from this taxonomy:\n\n"
                 + "\n".join([f"- {f}: {', '.join(cats)}" for f, cats in taxonomy.items()])
-                + "\n\nReturn a JSON list, one object per line item, "
-                  "with keys: family, category1, confidence."
+                + "\n\nYou MUST respond ONLY with a valid JSON array, no text, "
+                "no markdown, no code fences."
             )
 
             items_text = "\n".join([f"{j+1}. {t}" for j, t in enumerate(batch)])
 
             user_prompt = (
-                "Classify EACH line item below.\n\n"
-                f"{items_text}\n\n"
-                "Return ONLY a JSON list of objects, in the same order."
+               "Classify EACH line item below.\n\n"
+             f"{items_text}\n\n"
+             "Return ONLY a JSON array of objects, in this exact format:\n"
+             "[\n"
+             "  {\"family\": \"...\", \"category1\": \"...\", \"confidence\": 0.0},\n"
+             "  ...\n"
+                "]\n"
+                "One object per line item, in the same order. No explanation text."
             )
 
             resp = groq_client.chat.completions.create(

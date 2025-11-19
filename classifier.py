@@ -217,73 +217,32 @@ def classify_batch_items(
     taxonomy: Dict[str, List[str]],
     use_examples: bool = False,
 ) -> List[Classification]:
-
-    retrieval_results = []
-    hard_items, hard_indices = [], []
-
-    for i, item in enumerate(items):
-        r = classify_by_retrieval_only(item, taxonomy)
-        if r is None:
-            retrieval_results.append(None)
-            hard_items.append(item)
-            hard_indices.append(i)
-        else:
-            retrieval_results.append(r)
-
-    if not hard_items:
-        return retrieval_results
-
-    BATCH_SIZE = 50
-    llm_results = []
-
-    for i in range(0, len(hard_items), BATCH_SIZE):
-        batch = hard_items[i:i + BATCH_SIZE]
-
-        system_prompt = (
-            "You classify purchasing item descriptions.\n"
-            "Choose exactly ONE Family and ONE Category from this taxonomy:\n\n"
-            + "\n".join([f"- {f}: {', '.join(cats)}" for f, cats in taxonomy.items()])
-            + "\n\nReturn a JSON list, one object per item."
-        )
-
-        items_text = "\n".join([f"{j+1}. {t}" for j, t in enumerate(batch)])
-
-        user_prompt = (
-            f"Classify EACH line item:\n\n{items_text}\n\n"
-            "Return ONLY a JSON list of objects."
-        )
-
-        resp = groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.1,
-        )
-
-        raw = resp.choices[0].message.content
+    """
+    Simple batch: reuse the single-item pipeline for each line.
+    - retrieval-only first
+    - LLM fallback if needed
+    - no fragile JSON list parsing
+    """
+    results: List[Classification] = []
+    for text in items:
         try:
-            parsed_list = json.loads(raw[raw.find("["):raw.rfind("]")+1])
-        except:
-            parsed_list = [{"family": "Unclassified", "category1": "Unclassified", "confidence": 0.0} for _ in batch]
-
-        for obj in parsed_list:
-            llm_results.append(
-                Classification(
-                    family=obj.get("family", "Unclassified"),
-                    category1=obj.get("category1", obj.get("category", "Unclassified")),
-                    confidence=float(obj.get("confidence", 0)),
-                    rationale="",
-                )
+            res = classify_with_ollama(
+                text,
+                taxonomy,
+                include_rationale=False,   # no rationale in batch
+                use_examples=use_examples,
             )
+        except Exception:
+            # super-safe fallback
+            res = Classification(
+                family="Unclassified",
+                category1="Unclassified",
+                confidence=0.0,
+                rationale="Batch fallback error",
+            )
+        results.append(res)
+    return results
 
-    llm_i = 0
-    for idx in hard_indices:
-        retrieval_results[idx] = llm_results[llm_i]
-        llm_i += 1
-
-    return retrieval_results
 
 
 

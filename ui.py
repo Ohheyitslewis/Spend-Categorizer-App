@@ -9,7 +9,7 @@ import streamlit as st
 
 from classifier import (
     load_taxonomy,
-    classify_single_item,
+    classify_with_ollama,       # ✅ correct single-item function
     classify_batch_items,
     Classification,
 )
@@ -150,10 +150,11 @@ with tab_single:
             st.warning("Please enter a description.")
         else:
             with st.spinner("Classifying…"):
-                res: Classification = classify_single_item(
+                res: Classification = classify_with_ollama(
                     desc.strip(),
                     taxonomy,
-                    model_name=model_name,
+                    include_rationale=True,
+                    use_examples=False,
                 )
 
             # Output
@@ -211,7 +212,6 @@ with tab_batch:
                 results = classify_batch_items(
                     lines,
                     taxonomy,
-                    model_name=model_name,
                 )
 
             df = pd.DataFrame([
@@ -226,26 +226,4 @@ with tab_batch:
 
             st.markdown('<div class="card">', unsafe_allow_html=True)
             st.subheader("Results")
-            st.dataframe(df, use_container_width=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-
-            # Download CSV
-            csv_buf = io.StringIO()
-            df.to_csv(csv_buf, index=False)
-            st.download_button(
-                "⬇️ Download CSV",
-                csv_buf.getvalue(),
-                file_name="items_classified.csv",
-                mime="text/csv",
-                use_container_width=True,
-            )
-
-            low = df[df["confidence"] < conf_floor]
-            if not low.empty:
-                st.warning(f"{len(low)} items below confidence threshold {conf_floor:.2f}")
-
-
-
-
-
-
+            st.dataframe(df, use_container_width

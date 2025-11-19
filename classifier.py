@@ -235,122 +235,135 @@ def classify_batch_items(
 ) -> List[Classification]:
     """
     TRUE batch classifier:
-      1) Do a single batched embedding call for ALL items.
+      1) Do a single batched embedding call for ALL items (if index available).
       2) Use nearest neighbor in examples_index.pkl for fast retrieval.
-      3) Only send 'hard' / low-similarity items to the Groq LLM in batches.
+      3) Only send 'hard' / low-confidence items to the Groq LLM in batches.
+      4) Guarantee every output is a Classification (no None).
     """
 
-    # ------------------------------------------------------------------
-    # 1) Load index + model, and batch-embed ALL item descriptions
-    # ------------------------------------------------------------------
-    idx = load_examples_index()
-    model = get_embed_model(idx["model_name"])
-
-    # Encode all items at once → HUGE speedup vs per-item encode
-    query_vecs = model.encode(items, normalize_embeddings=True)   # shape (N, D)
-    emb = idx["embeddings"]                                      # shape (M, D)
-
-    # Cosine similarity for all queries vs all examples in one go
-    # sims[i, j] = similarity(item i, example j)
-    sims = np.dot(query_vecs, emb.T)                             # shape (N, M)
-
-    retrieval_results: List[Classification | None] = [None] * len(items)
+    n = len(items)
+    results: List[Classification | None] = [None] * n
     hard_items: List[str] = []
     hard_indices: List[int] = []
 
     # ------------------------------------------------------------------
-    # 2) Retrieval-only pass using the batched similarities
+    # 1) Retrieval-first pass (batched) – if index/model available
     # ------------------------------------------------------------------
-    for i, desc in enumerate(items):
-        sim_row = sims[i]  # similarities to all examples for this item
+    try:
+        idx = load_examples_index()
+        model = get_embed_model(idx["model_name"])
 
-    fam, cat, conf = compute_retrieval_conf_from_row(sim_row, idx)
+        # Encode all items at once → one big call instead of N
+        query_vecs = model.encode(items, normalize_embeddings=True)   # shape (N, D)
+        emb = idx["embeddings"]                                      # shape (M, D)
 
-    if conf >= min_confidence:
-        retrieval_results[i] = Classification(
-            family=fam,
-            category1=cat,
-            confidence=conf,
-            rationale="retrieval batch match",
-        )
-    else:
-        hard_items.append(desc)
-        hard_indices.append(i)
+        sims = np.dot(query_vecs, emb.T)                             # shape (N, M)
 
-    # If everything was easy → no LLM calls at all 🎉
-    if not hard_items:
-        return retrieval_results  # type: ignore[return-value]
+        for i, desc in enumerate(items):
+            sim_row = sims[i]
 
-    # ------------------------------------------------------------------
-    # 3) LLM fallback for hard items (still batched)
-    # ------------------------------------------------------------------
-    BATCH_SIZE = 50
-    llm_results: List[Classification] = []
+            fam, cat, conf = compute_retrieval_conf_from_row(sim_row, idx)
 
-    for i in range(0, len(hard_items), BATCH_SIZE):
-        batch = hard_items[i:i + BATCH_SIZE]
-
-        system_prompt = (
-            "You classify purchasing item descriptions.\n"
-            "Choose exactly ONE Family and ONE Category from this taxonomy:\n\n"
-            + "\n".join([f"- {f}: {', '.join(cats)}" for f, cats in taxonomy.items()])
-            + "\n\nReturn a JSON list, one object per line item, "
-              "with keys: family, category1, confidence."
-        )
-
-        items_text = "\n".join([f"{j+1}. {t}" for j, t in enumerate(batch)])
-
-        user_prompt = (
-            "Classify EACH line item below.\n\n"
-            f"{items_text}\n\n"
-            "Return ONLY a JSON list of objects, in the same order."
-        )
-
-        resp = groq_client.chat.completions.create(
-            model=model_name,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.1,
-        )
-
-        raw = resp.choices[0].message.content
-
-        try:
-            start = raw.find("[")
-            end = raw.rfind("]")
-            parsed_list = json.loads(raw[start:end+1])
-        except Exception:
-            # If parsing fails, mark everything in this batch as Unclassified
-            parsed_list = [
-                {"family": "Unclassified", "category1": "Unclassified", "confidence": 0.0}
-                for _ in batch
-            ]
-
-        for obj in parsed_list:
-            fam = obj.get("family", "Unclassified")
-            cat = obj.get("category1", obj.get("category", "Unclassified"))
-            conf = float(obj.get("confidence", 0.0))
-            llm_results.append(
-                Classification(
+            if conf >= min_confidence:
+                results[i] = Classification(
                     family=fam,
                     category1=cat,
                     confidence=conf,
-                    rationale="LLM batch fallback",
+                    rationale="retrieval batch match",
                 )
+            else:
+                hard_items.append(desc)
+                hard_indices.append(i)
+
+    except Exception:
+        # If anything goes wrong in retrieval, just send everything to LLM
+        hard_items = items[:]
+        hard_indices = list(range(n))
+
+    # ------------------------------------------------------------------
+    # 2) LLM fallback for "hard" items (batched)
+    # ------------------------------------------------------------------
+    if hard_items:
+        BATCH_SIZE = 50
+        llm_results: List[Classification] = []
+
+        for i in range(0, len(hard_items), BATCH_SIZE):
+            batch = hard_items[i:i + BATCH_SIZE]
+
+            system_prompt = (
+                "You classify purchasing item descriptions.\n"
+                "Choose exactly ONE Family and ONE Category from this taxonomy:\n\n"
+                + "\n".join([f"- {f}: {', '.join(cats)}" for f, cats in taxonomy.items()])
+                + "\n\nReturn a JSON list, one object per line item, "
+                  "with keys: family, category1, confidence."
             )
 
-    # ------------------------------------------------------------------
-    # 4) Merge LLM results back into the retrieval_results array
-    # ------------------------------------------------------------------
-    llm_i = 0
-    for idx_i in hard_indices:
-        retrieval_results[idx_i] = llm_results[llm_i]
-        llm_i += 1
+            items_text = "\n".join([f"{j+1}. {t}" for j, t in enumerate(batch)])
 
-    # At this point, everything is filled in
-    return retrieval_results  # type: ignore[return-value]
+            user_prompt = (
+                "Classify EACH line item below.\n\n"
+                f"{items_text}\n\n"
+                "Return ONLY a JSON list of objects, in the same order."
+            )
+
+            resp = groq_client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.1,
+            )
+
+            raw = resp.choices[0].message.content
+
+            try:
+                start = raw.find("[")
+                end = raw.rfind("]")
+                parsed_list = json.loads(raw[start:end+1])
+            except Exception:
+                # If parsing fails, mark everything in this chunk as Unclassified
+                parsed_list = [
+                    {"family": "Unclassified", "category1": "Unclassified", "confidence": 0.0}
+                    for _ in batch
+                ]
+
+            for obj in parsed_list:
+                fam = obj.get("family", "Unclassified")
+                cat = obj.get("category1", obj.get("category", "Unclassified"))
+                conf = float(obj.get("confidence", 0.0))
+                llm_results.append(
+                    Classification(
+                        family=fam,
+                        category1=cat,
+                        confidence=conf,
+                        rationale="LLM batch fallback",
+                    )
+                )
+
+        # Merge LLM results back into their original positions
+        for idx_i, cls in zip(hard_indices, llm_results):
+            results[idx_i] = cls
+
+    # ------------------------------------------------------------------
+    # 3) Final safety – no None left behind
+    # ------------------------------------------------------------------
+    final_results: List[Classification] = []
+    for i, r in enumerate(results):
+        if r is None:
+            final_results.append(
+                Classification(
+                    family="Unclassified",
+                    category1="Unclassified",
+                    confidence=0.0,
+                    rationale="fallback: missing result",
+                )
+            )
+        else:
+            final_results.append(r)
+
+    return final_results
+
 
 
 

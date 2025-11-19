@@ -13,7 +13,9 @@ import pickle
 import numpy as np
 from sentence_transformers import SentenceTransformer
 import re  # NEW
+
 groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+
 
 def _normalize_confidence(val):
     """
@@ -34,6 +36,7 @@ def _normalize_confidence(val):
         return max(0.0, min(1.0, v))
     except Exception:
         return None
+
 
 def retrieval_confidence_for(query: str, pred_family: str, pred_category: str):
     """
@@ -65,6 +68,15 @@ def retrieval_confidence_for(query: str, pred_family: str, pred_category: str):
         return max(0.0, min(1.0, conf))
     except Exception:
         return None
+
+
+class Classification(BaseModel):
+    family: str
+    category1: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    rationale: str
+
+
 def classify_by_retrieval_only(
     item_description: str,
     taxonomy: Dict[str, List[str]],
@@ -103,14 +115,6 @@ def classify_by_retrieval_only(
             return raw
     except Exception:
         return None
-
-
-
-class Classification(BaseModel):
-    family: str
-    category1: str
-    confidence: float = Field(ge=0.0, le=1.0)
-    rationale: str
 
 
 def load_taxonomy(path: str | Path = "taxonomy.json") -> Dict[str, List[str]]:
@@ -170,8 +174,11 @@ def build_user_prompt(item_description: str) -> str:
         f"Item description: {item_description}\n"
         "Return JSON now with keys: family, category1, confidence, rationale."
     )
+
+
 _EMBED_MODEL = None
 _EX_INDEX = None
+
 
 def load_examples_index(path: str = "examples_index.pkl"):
     global _EX_INDEX
@@ -180,12 +187,14 @@ def load_examples_index(path: str = "examples_index.pkl"):
             _EX_INDEX = pickle.load(f)
     return _EX_INDEX
 
+
 def get_embed_model(model_name: str):
     global _EMBED_MODEL
     if _EMBED_MODEL is None or getattr(_EMBED_MODEL, "_name", None) != model_name:
         _EMBED_MODEL = SentenceTransformer(model_name)
         _EMBED_MODEL._name = model_name
     return _EMBED_MODEL
+
 
 def top_k_examples(query: str, k: int = 5):
     idx = load_examples_index()
@@ -203,6 +212,7 @@ def top_k_examples(query: str, k: int = 5):
         })
     return examples
 
+
 def format_examples_for_prompt(examples):
     lines = ["Here are labeled examples most similar to the item description. Use these only as guidance:"]
     for j, ex in enumerate(examples, 1):
@@ -214,11 +224,13 @@ def format_examples_for_prompt(examples):
         )
     return "\n".join(lines)
 
+
 def _best_match(name: str, choices: list[str], cutoff: float = 0.6) -> str | None:
     if not name or not choices:
         return None
     matches = difflib.get_close_matches(name, choices, n=1, cutoff=cutoff)
     return matches[0] if matches else None
+
 
 def normalize_prediction(pred: Classification, taxonomy: Dict[str, List[str]]) -> Classification:
     """Coerce model output to the closest valid Family and Category from taxonomy."""
@@ -345,13 +357,8 @@ def classify_with_ollama(
 
     fam = parsed.get("family") or parsed.get("Family") or "Unclassified"
     cat = parsed.get("category1") or parsed.get("category") or parsed.get("Category") or "Unclassified"
-    conf = parsed.get("confidence") or parsed.get("Confidence") or 0.0
-    try:
-        conf = float(conf)
-        if conf > 1.0:  # tolerate percentage
-            conf = conf / 100.0
-    except Exception:
-        conf = 0.0
+    conf_raw = parsed.get("confidence") or parsed.get("Confidence") or 0.0
+    conf = _normalize_confidence(conf_raw) or 0.0
 
     rat = parsed.get("rationale") or parsed.get("Rationale") or ""
     if not include_rationale:
@@ -364,6 +371,151 @@ def classify_with_ollama(
         return raw
 
 
+# ---------- TRUE BATCHING: classify many items in one or few LLM calls ----------
+
+def classify_batch_items(
+    descriptions: List[str],
+    taxonomy: Dict[str, List[str]],
+    model_name: str = "llama3",
+    use_examples: bool = False,
+    min_confidence: float = 0.75,
+    batch_size: int = 32,
+) -> List[Classification]:
+    """
+    Classify many descriptions at once.
+
+    - First, try retrieval-only classification for each item.
+    - For those that are still unresolved, send them to the LLM in batches.
+    - Returns a list of Classification objects in the same order as `descriptions`.
+    """
+    n = len(descriptions)
+    results: List[Classification | None] = [None] * n
+
+    # 1) Retrieval-first pass (no LLM calls for easy items)
+    for i, desc in enumerate(descriptions):
+        fast = classify_by_retrieval_only(desc, taxonomy, min_confidence=min_confidence)
+        if fast is not None:
+            fast.rationale = ""  # batch mode: keep output lean
+            results[i] = fast
+
+    # Collect unresolved items
+    unresolved: List[tuple[int, str]] = [
+        (i, descriptions[i]) for i in range(n) if results[i] is None
+    ]
+
+    if not unresolved:
+        # Everything handled by retrieval-only
+        return [r for r in results if r is not None]
+
+    system_prompt = build_system_prompt(taxonomy)
+
+    # 2) LLM batching for unresolved items
+    for start in range(0, len(unresolved), batch_size):
+        batch = unresolved[start:start + batch_size]
+        # local index -> global index mapping
+        idx_map = {local_idx: global_idx for local_idx, (global_idx, _) in enumerate(batch)}
+
+        # Build batch user prompt
+        lines = []
+        lines.append(
+            "You are given several purchasing line item descriptions, each with a local index."
+        )
+        lines.append(
+            "For EACH item, choose exactly ONE Family and ONE Category from the taxonomy above."
+        )
+        lines.append(
+            'Return a STRICT JSON array. Each element must be an object with keys: '
+            '"index", "family", "category1", "confidence".'
+        )
+        lines.append(
+            'The "index" must be the local index of the item. '
+            'Confidence must be a NUMBER between 0 and 1.'
+        )
+        lines.append("")
+        lines.append("Items:")
+        for local_idx, (global_idx, desc) in enumerate(batch):
+            lines.append(f"{local_idx}: {desc}")
+
+        user_prompt = "\n".join(lines)
+
+        response = groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.1,
+        )
+
+        content = response.choices[0].message.content
+
+        # Try to extract a JSON array
+        start_idx = content.find("[")
+        end_idx = content.rfind("]")
+        if start_idx == -1 or end_idx == -1:
+            # If LLM didn't return JSON array, skip this batch; we'll mark them Unclassified later
+            continue
+
+        try:
+            parsed = json.loads(content[start_idx:end_idx + 1])
+        except Exception:
+            continue
+
+        if not isinstance(parsed, list):
+            parsed = [parsed]
+
+        for obj in parsed:
+            if not isinstance(obj, dict):
+                continue
+            # Read local index
+            try:
+                local_index = obj.get("index") or obj.get("idx") or obj.get("id")
+                if local_index is None:
+                    continue
+                local_index = int(local_index)
+            except Exception:
+                continue
+
+            if local_index not in idx_map:
+                continue
+
+            global_index = idx_map[local_index]
+
+            fam = (obj.get("family") or obj.get("Family") or "Unclassified") or "Unclassified"
+            cat = (
+                obj.get("category1")
+                or obj.get("category")
+                or obj.get("Category")
+                or "Unclassified"
+            ) or "Unclassified"
+            conf_raw = obj.get("confidence") or obj.get("Confidence") or 0.0
+            conf = _normalize_confidence(conf_raw) or 0.0
+
+            raw = Classification(
+                family=fam,
+                category1=cat,
+                confidence=conf,
+                rationale="",  # no rationale in batch
+            )
+            try:
+                results[global_index] = normalize_prediction(raw, taxonomy)
+            except Exception:
+                results[global_index] = raw
+
+    # 3) Fill in any still-missing results as Unclassified
+    final_results: List[Classification] = []
+    for i, desc in enumerate(descriptions):
+        res = results[i]
+        if res is None:
+            res = Classification(
+                family="Unclassified",
+                category1="Unclassified",
+                confidence=0.0,
+                rationale="No classification returned.",
+            )
+        final_results.append(res)
+
+    return final_results
 
 
 if __name__ == "__main__":
@@ -381,4 +533,5 @@ if __name__ == "__main__":
     result = classify_with_ollama(description_example, taxonomy, model_name="llama3")
     print("Classification output:")
     print(result.model_dump())
+
 

@@ -1,8 +1,7 @@
-# ui.py — SpendPilot AI with branding, file upload, and distribution charts
+# ui.py — SpendPilot AI polished UI (hero card + pill mode switch + upload + charts)
 import io
 import os
 import csv
-from datetime import datetime
 
 import pandas as pd
 import streamlit as st
@@ -21,9 +20,8 @@ try:
 except Exception:
     HAS_EXAMPLES = False
 
-
 # ============================================================
-#  PAGE SETUP
+#  PAGE CONFIG & BRANDING
 # ============================================================
 st.set_page_config(
     page_title="SpendPilot AI",
@@ -31,128 +29,193 @@ st.set_page_config(
     layout="wide",
 )
 
-# Brand colors
 PRIMARY_BG = "#1c2a51"   # your dark blue
 ACCENT = "#e2551c"       # your orange
+CONF_FLOOR = 0.60        # low-confidence warning threshold
+MODEL_NAME = "llama-3.1-8b-instant"
 
-# Global style
-st.markdown(f"""
+# ============================================================
+#  GLOBAL STYLES
+# ============================================================
+st.markdown(
+    f"""
 <style>
-/* Hide Streamlit default header/footer */
-header {{visibility: hidden;}}
-footer {{visibility: hidden;}}
+/* Hide default header/footer */
+header {{ visibility: hidden; }}
+footer {{ visibility: hidden; }}
 
 /* Layout */
 .block-container {{
-    padding-top: 2rem !important;
+    padding-top: 1.8rem !important;
     max-width: 1200px;
 }}
 
-/* Background & font */
+/* Background & base text */
 html, body, [data-testid="stAppViewContainer"] {{
-    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: radial-gradient(1200px 800px at 10% 0%, rgba(226,85,28,0.10), transparent 45%),
-                radial-gradient(1200px 800px at 90% 20%, rgba(255,255,255,0.05), transparent 50%),
-                {PRIMARY_BG};
-    color: #e5e7eb;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background:
+        radial-gradient(1000px 700px at 10% 0%, rgba(226,85,28,0.15), transparent 55%),
+        radial-gradient(1200px 800px at 90% 20%, rgba(255,255,255,0.06), transparent 55%),
+        {PRIMARY_BG};
+    color: #f9fafb;
 }}
 
-/* Hero title */
-.hero-title {{
-    font-size: 3rem;
-    text-align: center;
+/* Smooth fade-in animations */
+@keyframes fadeInDown {{
+  from {{ opacity: 0; transform: translateY(-16px); }}
+  to   {{ opacity: 1; transform: translateY(0); }}
+}}
+@keyframes fadeInUp {{
+  from {{ opacity: 0; transform: translateY(16px); }}
+  to   {{ opacity: 1; transform: translateY(0); }}
+}}
+
+/* HERO WRAPPER + CARD */
+.hero-wrapper {{
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1.4rem;
+}}
+
+.hero-card {{
+    background: #ffffff;
+    color: #111827;
+    border-radius: 20px;
+    padding: 1.4rem 2.2rem 1.6rem;
+    max-width: 780px;
+    width: 100%;
+    box-shadow: 0 22px 60px rgba(15,23,42,0.55);
+    border: 1px solid rgba(15,23,42,0.08);
+    animation: fadeInDown 0.6s ease-out;
+}}
+
+.hero-title-main {{
+    font-size: 2.3rem;
     font-weight: 800;
-    margin-top: 0.2em;
-    background: linear-gradient(90deg, {ACCENT}, #f97316);
+    letter-spacing: 0.02em;
+    margin-bottom: 0.25rem;
+    background: linear-gradient(90deg, {ACCENT}, #fb923c);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }}
 
-/* Hero subtitle — now white */
 .hero-sub {{
-    text-align: center;
-    font-size: 1.1rem;
-    margin-top: 0.4em;
-    color: #ffffff;
+    font-size: 0.98rem;
+    color: #4b5563;
+    margin-bottom: 0.8rem;
 }}
 
-/* Section card */
-.section-card {{
+.hero-tags {{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.2rem;
+}}
+
+.hero-tag {{
+    font-size: 0.78rem;
+    padding: 0.16rem 0.6rem;
+    border-radius: 999px;
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid #e5e7eb;
+}}
+
+/* MAIN CARD */
+.main-card {{
+    background: rgba(15,23,42,0.96);
+    border-radius: 22px;
+    padding: 1.6rem 1.6rem 1.4rem;
+    border: 1px solid rgba(148,163,184,0.55);
+    box-shadow: 0 20px 55px rgba(15,23,42,0.8);
+    animation: fadeInUp 0.6s ease-out;
+    margin-bottom: 2.0rem;
+}}
+
+/* MODE PILLS */
+.mode-bar {{
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1.4rem;
+}}
+
+.mode-pill-group {{
+    display: inline-flex;
     background: rgba(15,23,42,0.9);
-    border-radius: 20px;
-    padding: 1.7rem 2rem;
-    border: 1px solid rgba(148,163,184,0.45);
-    margin-top: 1.5rem;
-    box-shadow: 0 18px 45px rgba(15,23,42,0.7);
+    padding: 0.25rem;
+    border-radius: 999px;
+    border: 1px solid rgba(148,163,184,0.7);
 }}
 
-/* Tabs */
-[data-baseweb="tab-list"] {{
-    gap: 0.5rem;
-}}
-button[role="tab"] {{
-    border-radius: 999px !important;
+.mode-pill {{
+    padding: 0.45rem 1.1rem;
+    font-size: 0.92rem;
+    border-radius: 999px;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: #e5e7eb;
+    transition: all 0.18s ease-out;
+    white-space: nowrap;
 }}
 
-/* Force tab text to white */
-button[role="tab"] > div[data-testid="stMarkdownContainer"] p {{
-    color: #ffffff !important;
+.mode-pill.active {{
+    background: linear-gradient(135deg, {ACCENT}, #fb923c);
+    color: #111827;
+    font-weight: 600;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.45);
+}}
+
+/* Section titles */
+.section-title {{
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin-bottom: 0.6rem;
 }}
 
 /* Inputs */
 textarea, .stTextInput>div>div>input {{
-    background: rgba(15,23,42,0.95) !important;
-    color: #e5e7eb !important;
+    background: rgba(15,23,42,0.98) !important;
+    color: #f9fafb !important;
     border-radius: 12px !important;
-    border: 1px solid rgba(148,163,184,0.6) !important;
+    border: 1px solid rgba(148,163,184,0.7) !important;
 }}
 
-/* Dataframe */
+textarea::placeholder {{
+    color: #9ca3af !important;
+}}
+
+/* Buttons */
+.stButton>button {{
+    border-radius: 999px !important;
+    border: none !important;
+    background: {ACCENT} !important;
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    padding: 0.45rem 1.4rem !important;
+}}
+
+.stDownloadButton>button {{
+    border-radius: 999px !important;
+    border: 1px solid rgba(148,163,184,0.7) !important;
+    background: transparent !important;
+    color: #f9fafb !important;
+    font-weight: 500 !important;
+}}
+
+/* Dataframes */
 [data-testid="stDataFrame"] {{
-    background: rgba(15,23,42,0.95);
+    background: rgba(15,23,42,0.96);
     border-radius: 14px;
 }}
 
-/* Accent buttons */
-.stButton>button:first-child {{
-    background: {ACCENT} !important;
-    color: white !important;
-    border-radius: 999px !important;
-    border: none !important;
-    font-weight: 600 !important;
-}}
-
-/* Make all labels and small UI text white */
-label,
-.stRadio label,
-.stSelectbox label,
-.stFileUploader label,
-.stSlider label,
-.st-expanderHeader,
-.stRadio > label,
-.stCheckbox > label {{
-    color: #ffffff !important;
-}}
-
-/* Markdown containers that streamlit uses for text in many widgets */
-div[data-testid="stMarkdownContainer"] p,
-div[data-testid="stMarkdownContainer"] span {{
-    color: #ffffff !important;
+small, .stCaption, .stMarkdown p {{
+    color: #e5e7eb;
 }}
 </style>
-""", unsafe_allow_html=True)
-
-
-# ============================================================
-#  HERO SECTION
-# ============================================================
-st.markdown("<div class='hero-title'>SpendPilot AI</div>", unsafe_allow_html=True)
-st.markdown(
-    "<div class='hero-sub'>AI-powered line item classification — turn raw spend data into clean, actionable categories in seconds.</div>",
+""",
     unsafe_allow_html=True,
 )
-st.markdown("<br>", unsafe_allow_html=True)
-
 
 # ============================================================
 #  TAXONOMY
@@ -163,45 +226,96 @@ def get_taxonomy():
 
 taxonomy = get_taxonomy()
 
+# ============================================================
+#  HERO SECTION
+# ============================================================
+st.markdown(
+    """
+<div class="hero-wrapper">
+  <div class="hero-card">
+    <div class="hero-title-main">SpendPilot AI</div>
+    <div class="hero-sub">
+      The AI copilot for spend classification — upload raw line items and get clean,
+      normalized Families & Categories in seconds.
+    </div>
+    <div class="hero-tags">
+      <span class="hero-tag">✅ Purpose-built for purchasing & FP&amp;A</span>
+      <span class="hero-tag">🧠 LLM + similarity-based retrieval</span>
+      <span class="hero-tag">📊 Instant distribution by Family & Category</span>
+    </div>
+  </div>
+</div>
+""",
+    unsafe_allow_html=True,
+)
 
 # ============================================================
-#  SETTINGS
+#  MODE STATE (Single vs Batch)
 # ============================================================
-with st.expander("⚙️ Settings", expanded=False):
-    c1, c2 = st.columns([1.2, 1])
-    with c1:
-        model_name = st.text_input("Groq model", value="llama-3.1-8b-instant")
-    with c2:
-        conf_floor = st.slider("Confidence threshold ≥", 0.0, 1.0, 0.60, 0.05)
+if "sp_mode" not in st.session_state:
+    st.session_state.sp_mode = "single"
 
-    if st.button("🔄 Reload taxonomy.json"):
-        get_taxonomy.clear()
-        st.success("Reloaded taxonomy.json")
-        st.rerun()
-
+def set_mode(new_mode: str):
+    st.session_state.sp_mode = new_mode
 
 # ============================================================
-#  TABS
+#  MAIN CARD
 # ============================================================
-tab_single, tab_batch = st.tabs(["🔹 Single Item", "📦 Batch (Paste or Upload)"])
+st.markdown('<div class="main-card">', unsafe_allow_html=True)
 
-
-# ============================================================
-#  SINGLE ITEM TAB
-# ============================================================
-with tab_single:
-    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-
-    st.markdown("#### Classify a single line item")
-    desc = st.text_area(
-        "Item Description",
-        height=120,
-        placeholder="Example: 3M nitrile gloves, size large, 100 count",
+# MODE PILLS
+col_mode = st.columns([1])[0]
+with col_mode:
+    st.markdown(
+        f"""
+<div class="mode-bar">
+  <div class="mode-pill-group">
+    <button class="mode-pill {'active' if st.session_state.sp_mode == 'single' else ''}"
+            onclick="window.parent.postMessage({{'type': 'spendpilot-set-mode', 'mode': 'single'}}, '*')">
+      Single item
+    </button>
+    <button class="mode-pill {'active' if st.session_state.sp_mode == 'batch' else ''}"
+            onclick="window.parent.postMessage({{'type': 'spendpilot-set-mode', 'mode': 'batch'}}, '*')">
+      Batch (paste / upload)
+    </button>
+  </div>
+</div>
+""",
+        unsafe_allow_html=True,
     )
 
-    classify_button = st.button("✨ Classify Item")
+# NOTE:
+# Streamlit doesn't natively support JS event wiring in Python,
+# so we mirror the pill state with simple buttons underneath.
 
-    if classify_button:
+c1, c2 = st.columns(2)
+with c1:
+    if st.button("Single item", key="mode_single_btn"):
+        set_mode("single")
+with c2:
+    if st.button("Batch (paste / upload)", key="mode_batch_btn"):
+        set_mode("batch")
+
+st.write("")  # spacer
+
+mode = st.session_state.sp_mode
+
+# ============================================================
+#  SINGLE ITEM MODE
+# ============================================================
+if mode == "single":
+    st.markdown('<div class="section-title">Classify a single line item</div>', unsafe_allow_html=True)
+
+    desc = st.text_area(
+        "Item description",
+        height=120,
+        placeholder="Example: 3M nitrile gloves, size large, 100 count",
+        key="single_desc",
+    )
+
+    classify_single = st.button("✨ Classify item", key="single_go")
+
+    if classify_single:
         if not desc.strip():
             st.warning("Please enter an item description.")
         else:
@@ -212,14 +326,14 @@ with tab_single:
                     include_rationale=True,
                 )
 
+            # Result
             st.markdown("---")
-            st.markdown("### Result")
-
-            col1, col2 = st.columns(2)
-            with col1:
+            st.markdown("#### Result")
+            col_a, col_b = st.columns(2)
+            with col_a:
                 st.write(f"**Family:** {res.family}")
                 st.write(f"**Category:** {res.category1}")
-            with col2:
+            with col_b:
                 pct = int(round(res.confidence * 100))
                 st.write("**Confidence**")
                 st.progress(pct if 0 <= pct <= 100 else 0, text=f"{pct}%")
@@ -227,14 +341,12 @@ with tab_single:
             st.markdown("**Rationale**")
             st.write(res.rationale)
 
-    st.markdown("</div>", unsafe_allow_html=True)
-
     # Optional similar examples
     if HAS_EXAMPLES and desc.strip():
         try:
             examples = top_k_examples(desc.strip(), k=5)
             if examples:
-                with st.expander("🔎 View similar examples used in retrieval"):
+                with st.expander("🔎 View similar labeled examples"):
                     for ex in examples:
                         st.markdown(
                             f"""
@@ -242,36 +354,35 @@ with tab_single:
 **Description:** {ex['description']}  
 **Family:** {ex['family']}  
 **Category:** {ex['category1']}  
+
+---
 """
                         )
         except Exception:
             pass
 
-
 # ============================================================
-#  BATCH TAB (PASTE OR FILE UPLOAD)
+#  BATCH MODE
 # ============================================================
-with tab_batch:
-    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+else:
+    st.markdown('<div class="section-title">Classify many items at once</div>', unsafe_allow_html=True)
 
-    st.markdown("#### Classify many items at once")
-
-    mode = st.radio(
-        "Choose how to provide your items:",
+    mode_choice = st.radio(
+        "Input method",
         ["📄 Upload Excel/CSV", "✏️ Paste lines"],
         horizontal=True,
+        key="batch_input_mode",
     )
 
-    desc_list = []
+    desc_list: list[str] = []
+    df_input = None
 
-    if mode.startswith("📄"):
+    if mode_choice.startswith("📄"):
         uploaded_file = st.file_uploader(
-            "Upload a file (.xlsx, .xls, or .csv) with at least one text column for item descriptions",
+            "Upload .xlsx, .xls, or .csv with a text column for item descriptions",
             type=["xlsx", "xls", "csv"],
+            key="batch_file",
         )
-
-        df_input = None
-        desc_col = None
 
         if uploaded_file is not None:
             try:
@@ -283,12 +394,13 @@ with tab_batch:
                 if df_input.empty:
                     st.warning("Uploaded file is empty.")
                 else:
-                    st.write("Preview of your data:")
+                    st.write("Preview:")
                     st.dataframe(df_input.head(), use_container_width=True)
 
                     desc_col = st.selectbox(
-                        "Select the column that contains item descriptions",
+                        "Select the description column",
                         options=list(df_input.columns),
+                        key="batch_desc_col",
                     )
 
                     if desc_col:
@@ -301,13 +413,14 @@ with tab_batch:
     else:
         multi = st.text_area(
             "One item per line",
-            height=200,
-            placeholder="3M nitrile gloves\n30x30x30 double wall carton\n1.5” Schedule 80 PVC elbow",
+            height=220,
+            placeholder="3M nitrile gloves, size large, 100 count\n30x30x30 double wall carton\n1.5” Schedule 80 PVC elbow",
+            key="batch_paste",
         )
         if multi:
             desc_list = [ln.strip() for ln in multi.splitlines() if ln.strip()]
 
-    run_batch = st.button("🚀 Classify All Items", use_container_width=True)
+    run_batch = st.button("🚀 Classify all items", use_container_width=True, key="batch_go")
 
     if run_batch:
         if not desc_list:
@@ -317,7 +430,7 @@ with tab_batch:
                 results = classify_batch_items(
                     desc_list,
                     taxonomy,
-                    model_name=model_name,
+                    model_name=MODEL_NAME,
                 )
 
             df = pd.DataFrame(
@@ -347,17 +460,14 @@ with tab_batch:
                 use_container_width=True,
             )
 
-            # ====================================================
-            #  DISTRIBUTION CHARTS
-            # ====================================================
-            st.markdown("---")
-            st.markdown("### Distribution Overview")
-
-            # Family distribution
+            # Distribution charts
             if not df.empty:
+                st.markdown("---")
+                st.markdown("### Distribution overview")
+
+                # Family distribution
                 family_counts = df["family"].value_counts().reset_index()
                 family_counts.columns = ["family", "count"]
-
                 st.markdown("**By Family**")
                 st.bar_chart(
                     data=family_counts.set_index("family")["count"],
@@ -368,7 +478,6 @@ with tab_batch:
                 df["family_category"] = df["family"] + " → " + df["category1"]
                 fc_counts = df["family_category"].value_counts().reset_index()
                 fc_counts.columns = ["family_category", "count"]
-
                 st.markdown("**By Family + Category**")
                 st.bar_chart(
                     data=fc_counts.set_index("family_category")["count"],
@@ -376,11 +485,15 @@ with tab_batch:
                 )
 
                 # Low confidence flag
-                low = df[df["confidence"] < conf_floor]
+                low = df[df["confidence"] < CONF_FLOOR]
                 if not low.empty:
-                    st.warning(f"{len(low)} item(s) below confidence threshold {conf_floor:.2f} — consider manual review.")
+                    st.warning(
+                        f"{len(low)} item(s) below confidence threshold {CONF_FLOOR:.2f} — consider manual review."
+                    )
 
-    st.markdown("</div>", unsafe_allow_html=True)
+# Close main-card div
+st.markdown("</div>", unsafe_allow_html=True)
+
 
 
 

@@ -68,12 +68,12 @@ html, body, [data-testid="stAppViewContainer"] {{
     -webkit-text-fill-color: transparent;
 }}
 
-/* Hero subtitle */
+/* Hero subtitle — now white */
 .hero-sub {{
     text-align: center;
     font-size: 1.1rem;
     margin-top: 0.4em;
-    color: #cbd5f5;
+    color: #ffffff;
 }}
 
 /* Section card */
@@ -92,6 +92,11 @@ html, body, [data-testid="stAppViewContainer"] {{
 }}
 button[role="tab"] {{
     border-radius: 999px !important;
+}}
+
+/* Force tab text to white */
+button[role="tab"] > div[data-testid="stMarkdownContainer"] p {{
+    color: #ffffff !important;
 }}
 
 /* Inputs */
@@ -115,6 +120,24 @@ textarea, .stTextInput>div>div>input {{
     border-radius: 999px !important;
     border: none !important;
     font-weight: 600 !important;
+}}
+
+/* Make all labels and small UI text white */
+label,
+.stRadio label,
+.stSelectbox label,
+.stFileUploader label,
+.stSlider label,
+.st-expanderHeader,
+.stRadio > label,
+.stCheckbox > label {{
+    color: #ffffff !important;
+}}
+
+/* Markdown containers that streamlit uses for text in many widgets */
+div[data-testid="stMarkdownContainer"] p,
+div[data-testid="stMarkdownContainer"] span {{
+    color: #ffffff !important;
 }}
 </style>
 """, unsafe_allow_html=True)
@@ -358,5 +381,6 @@ with tab_batch:
                     st.warning(f"{len(low)} item(s) below confidence threshold {conf_floor:.2f} — consider manual review.")
 
     st.markdown("</div>", unsafe_allow_html=True)
+
 
 

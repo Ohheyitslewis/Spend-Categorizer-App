@@ -1,4 +1,4 @@
-# ui.py — SpendPilot AI: hero card + single tab bar + batch upload + charts
+# ui.py — SpendPilot AI with branding, file upload, and distribution charts
 import io
 import os
 import csv
@@ -21,6 +21,7 @@ try:
 except Exception:
     HAS_EXAMPLES = False
 
+
 # ============================================================
 #  PAGE SETUP
 # ============================================================
@@ -30,185 +31,128 @@ st.set_page_config(
     layout="wide",
 )
 
+# Brand colors
 PRIMARY_BG = "#1c2a51"   # your dark blue
 ACCENT = "#e2551c"       # your orange
 
-st.markdown(
-    f"""
+# Global style
+st.markdown(f"""
 <style>
-/* --------- Global layout & background --------- */
+/* Hide Streamlit default header/footer */
 header {{visibility: hidden;}}
 footer {{visibility: hidden;}}
 
+/* Layout */
 .block-container {{
     padding-top: 2rem !important;
     max-width: 1200px;
 }}
 
+/* Background & font */
 html, body, [data-testid="stAppViewContainer"] {{
     font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: radial-gradient(1200px 800px at 10% 0%, rgba(226,85,28,0.16), transparent 45%),
-                radial-gradient(1200px 800px at 90% 20%, rgba(255,255,255,0.05), transparent 55%),
+    background: radial-gradient(1200px 800px at 10% 0%, rgba(226,85,28,0.10), transparent 45%),
+                radial-gradient(1200px 800px at 90% 20%, rgba(255,255,255,0.05), transparent 50%),
                 {PRIMARY_BG};
-    color: #f9fafb;
+    color: #e5e7eb;
 }}
 
-/* --------- Hero card --------- */
-.hero-wrapper {{
-    display: flex;
-    justify-content: center;
-    margin-bottom: 1.8rem;
-}}
-
-.hero-card {{
-    background: #ffffff;
-    color: #111827;
-    border-radius: 22px;
-    padding: 1.6rem 2.2rem 1.4rem;
-    box-shadow: 0 24px 60px rgba(15,23,42,0.35);
-    max-width: 900px;
-    width: 100%;
-}}
-
-.hero-eyebrow {{
-    font-size: 0.8rem;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: #6b7280;
-    margin-bottom: 0.3rem;
-}}
-
+/* Hero title */
 .hero-title {{
-    font-size: 2.1rem;
+    font-size: 3rem;
+    text-align: center;
     font-weight: 800;
-    color: {ACCENT};
-    margin-bottom: 0.3rem;
+    margin-top: 0.2em;
+    background: linear-gradient(90deg, {ACCENT}, #f97316);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
 }}
 
+/* Hero subtitle — now white */
 .hero-sub {{
-    font-size: 0.98rem;
-    color: #374151;
-    margin-bottom: 0.8rem;
+    text-align: center;
+    font-size: 1.1rem;
+    margin-top: 0.4em;
+    color: #ffffff;
 }}
 
-.hero-chips {{
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-}}
-
-.hero-chip {{
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.25rem 0.6rem;
-    font-size: 0.8rem;
-    border-radius: 999px;
-    border: 1px solid #e5e7eb;
-    background: #f9fafb;
-    color: #111827;
-}}
-
-.hero-chip span.icon {{
-    font-size: 0.8rem;
-}}
-
-/* --------- Main panel --------- */
-.main-panel {{
-    margin-top: 1.5rem;
-    background: rgba(15,23,42,0.96);
-    border-radius: 24px;
-    padding: 1.6rem 1.7rem 1.4rem;
-    box-shadow: 0 22px 60px rgba(15,23,42,0.65);
+/* Section card */
+.section-card {{
+    background: rgba(15,23,42,0.9);
+    border-radius: 20px;
+    padding: 1.7rem 2rem;
     border: 1px solid rgba(148,163,184,0.45);
+    margin-top: 1.5rem;
+    box-shadow: 0 18px 45px rgba(15,23,42,0.7);
 }}
 
-/* --------- Tabs (single bar only) --------- */
+/* Tabs */
 [data-baseweb="tab-list"] {{
-    gap: 0.4rem;
+    gap: 0.5rem;
 }}
-
 button[role="tab"] {{
     border-radius: 999px !important;
-    padding: 0.45rem 1.2rem !important;
-    font-size: 0.9rem !important;
-    border: 1px solid rgba(148,163,184,0.6) !important;
-    background: transparent !important;
-    color: #e5e7eb !important;
 }}
 
-button[role="tab"][aria-selected="true"] {{
-    background: {ACCENT} !important;
+/* Force tab text to white */
+button[role="tab"] > div[data-testid="stMarkdownContainer"] p {{
     color: #ffffff !important;
-    border-color: {ACCENT} !important;
 }}
 
-.stTabs [data-baseweb="tab"] p {{
-    color: #e5e7eb !important;
-}}
-
-/* --------- Inputs & text --------- */
+/* Inputs */
 textarea, .stTextInput>div>div>input {{
-    background: #020617 !important;
+    background: rgba(15,23,42,0.95) !important;
     color: #e5e7eb !important;
     border-radius: 12px !important;
-    border: 1px solid rgba(148,163,184,0.7) !important;
+    border: 1px solid rgba(148,163,184,0.6) !important;
 }}
 
-label, .stRadio label, .stFileUploader label {{
-    color: #f9fafb !important;
+/* Dataframe */
+[data-testid="stDataFrame"] {{
+    background: rgba(15,23,42,0.95);
+    border-radius: 14px;
 }}
 
-.small-label {{
-    font-size: 0.86rem;
-    color: #cbd5f5;
-    margin-bottom: 0.2rem;
-}}
-
-/* --------- Buttons --------- */
+/* Accent buttons */
 .stButton>button:first-child {{
     background: {ACCENT} !important;
     color: white !important;
     border-radius: 999px !important;
     border: none !important;
     font-weight: 600 !important;
-    padding: 0.4rem 1.4rem !important;
 }}
 
-/* Dataframe container */
-[data-testid="stDataFrame"] {{
-    background: #020617;
-    border-radius: 14px;
+/* Make all labels and small UI text white */
+label,
+.stRadio label,
+.stSelectbox label,
+.stFileUploader label,
+.stSlider label,
+.st-expanderHeader,
+.stRadio > label,
+.stCheckbox > label {{
+    color: #ffffff !important;
+}}
+
+/* Markdown containers that streamlit uses for text in many widgets */
+div[data-testid="stMarkdownContainer"] p,
+div[data-testid="stMarkdownContainer"] span {{
+    color: #ffffff !important;
 }}
 </style>
-""",
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
+
 
 # ============================================================
-#  HERO
+#  HERO SECTION
 # ============================================================
+st.markdown("<div class='hero-title'>SpendPilot AI</div>", unsafe_allow_html=True)
 st.markdown(
-    """
-<div class="hero-wrapper">
-  <div class="hero-card">
-    <div class="hero-eyebrow">SPEND CLASSIFICATION • FP&A</div>
-    <div class="hero-title">SpendPilot AI</div>
-    <div class="hero-sub">
-      The AI copilot for spend classification — upload raw line items and get clean, normalized
-      Families & Categories in seconds.
-    </div>
-    <div class="hero-chips">
-      <div class="hero-chip"><span class="icon">✅</span><span>Purpose-built for purchasing &amp; FP&amp;A</span></div>
-      <div class="hero-chip"><span class="icon">🧠</span><span>LLM + similarity-based retrieval</span></div>
-      <div class="hero-chip"><span class="icon">📊</span><span>Instant distribution by Family &amp; Category</span></div>
-    </div>
-  </div>
-</div>
-""",
+    "<div class='hero-sub'>AI-powered line item classification — turn raw spend data into clean, actionable categories in seconds.</div>",
     unsafe_allow_html=True,
 )
+st.markdown("<br>", unsafe_allow_html=True)
+
 
 # ============================================================
 #  TAXONOMY
@@ -219,24 +163,43 @@ def get_taxonomy():
 
 taxonomy = get_taxonomy()
 
+
 # ============================================================
-#  MAIN PANEL WITH TABS
+#  SETTINGS
 # ============================================================
-st.markdown("<div class='main-panel'>", unsafe_allow_html=True)
+with st.expander("⚙️ Settings", expanded=False):
+    c1, c2 = st.columns([1.2, 1])
+    with c1:
+        model_name = st.text_input("Groq model", value="llama-3.1-8b-instant")
+    with c2:
+        conf_floor = st.slider("Confidence threshold ≥", 0.0, 1.0, 0.60, 0.05)
 
-tabs = st.tabs(["Single item", "Batch (paste / upload)"])
+    if st.button("🔄 Reload taxonomy.json"):
+        get_taxonomy.clear()
+        st.success("Reloaded taxonomy.json")
+        st.rerun()
 
-# --------------------------- SINGLE ITEM ---------------------------
-with tabs[0]:
-    st.markdown("### Classify a single line item")
 
+# ============================================================
+#  TABS
+# ============================================================
+tab_single, tab_batch = st.tabs(["🔹 Single Item", "📦 Batch (Paste or Upload)"])
+
+
+# ============================================================
+#  SINGLE ITEM TAB
+# ============================================================
+with tab_single:
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+
+    st.markdown("#### Classify a single line item")
     desc = st.text_area(
-        "Item description",
-        height=110,
+        "Item Description",
+        height=120,
         placeholder="Example: 3M nitrile gloves, size large, 100 count",
     )
 
-    classify_button = st.button("✨ Classify item")
+    classify_button = st.button("✨ Classify Item")
 
     if classify_button:
         if not desc.strip():
@@ -250,19 +213,21 @@ with tabs[0]:
                 )
 
             st.markdown("---")
-            st.markdown("#### Result")
+            st.markdown("### Result")
 
             col1, col2 = st.columns(2)
             with col1:
-                st.markdown(f"**Family**  \n{res.family}")
-                st.markdown(f"**Category**  \n{res.category1}")
+                st.write(f"**Family:** {res.family}")
+                st.write(f"**Category:** {res.category1}")
             with col2:
                 pct = int(round(res.confidence * 100))
-                st.markdown("**Confidence**")
+                st.write("**Confidence**")
                 st.progress(pct if 0 <= pct <= 100 else 0, text=f"{pct}%")
 
             st.markdown("**Rationale**")
             st.write(res.rationale)
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
     # Optional similar examples
     if HAS_EXAMPLES and desc.strip():
@@ -277,32 +242,37 @@ with tabs[0]:
 **Description:** {ex['description']}  
 **Family:** {ex['family']}  
 **Category:** {ex['category1']}  
-
----
 """
                         )
         except Exception:
             pass
 
-# --------------------------- BATCH MODE ---------------------------
-with tabs[1]:
-    st.markdown("### Classify many items at once")
+
+# ============================================================
+#  BATCH TAB (PASTE OR FILE UPLOAD)
+# ============================================================
+with tab_batch:
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+
+    st.markdown("#### Classify many items at once")
 
     mode = st.radio(
-        "How would you like to provide items?",
+        "Choose how to provide your items:",
         ["📄 Upload Excel/CSV", "✏️ Paste lines"],
         horizontal=True,
     )
 
-    desc_list: list[str] = []
+    desc_list = []
 
     if mode.startswith("📄"):
         uploaded_file = st.file_uploader(
-            "Upload a file (.xlsx, .xls, or .csv) with a text column of item descriptions",
+            "Upload a file (.xlsx, .xls, or .csv) with at least one text column for item descriptions",
             type=["xlsx", "xls", "csv"],
         )
 
         df_input = None
+        desc_col = None
+
         if uploaded_file is not None:
             try:
                 if uploaded_file.name.lower().endswith(".csv"):
@@ -313,7 +283,7 @@ with tabs[1]:
                 if df_input.empty:
                     st.warning("Uploaded file is empty.")
                 else:
-                    st.markdown("<div class='small-label'>Preview</div>", unsafe_allow_html=True)
+                    st.write("Preview of your data:")
                     st.dataframe(df_input.head(), use_container_width=True)
 
                     desc_col = st.selectbox(
@@ -322,8 +292,9 @@ with tabs[1]:
                     )
 
                     if desc_col:
-                        series = df_input[desc_col].astype(str).fillna("")
-                        desc_list = [s.strip() for s in series.tolist() if s.strip()]
+                        desc_series = df_input[desc_col].astype(str).fillna("")
+                        desc_list = [d.strip() for d in desc_series.tolist() if d.strip()]
+
             except Exception as e:
                 st.error(f"Could not read file: {e}")
 
@@ -331,12 +302,12 @@ with tabs[1]:
         multi = st.text_area(
             "One item per line",
             height=200,
-            placeholder="3M nitrile gloves\n30x30x30 double wall corrugated carton\n1.5\" Schedule 80 PVC elbow",
+            placeholder="3M nitrile gloves\n30x30x30 double wall carton\n1.5” Schedule 80 PVC elbow",
         )
         if multi:
             desc_list = [ln.strip() for ln in multi.splitlines() if ln.strip()]
 
-    run_batch = st.button("🚀 Classify all items", use_container_width=True)
+    run_batch = st.button("🚀 Classify All Items", use_container_width=True)
 
     if run_batch:
         if not desc_list:
@@ -346,7 +317,7 @@ with tabs[1]:
                 results = classify_batch_items(
                     desc_list,
                     taxonomy,
-                    model_name="llama-3.1-8b-instant",
+                    model_name=model_name,
                 )
 
             df = pd.DataFrame(
@@ -361,7 +332,8 @@ with tabs[1]:
                 ]
             )
 
-            st.markdown("#### Results")
+            # Results table
+            st.markdown("### Results")
             st.dataframe(df, use_container_width=True)
 
             # Download CSV
@@ -375,10 +347,13 @@ with tabs[1]:
                 use_container_width=True,
             )
 
-            # Distribution charts
+            # ====================================================
+            #  DISTRIBUTION CHARTS
+            # ====================================================
             st.markdown("---")
-            st.markdown("#### Distribution overview")
+            st.markdown("### Distribution Overview")
 
+            # Family distribution
             if not df.empty:
                 family_counts = df["family"].value_counts().reset_index()
                 family_counts.columns = ["family", "count"]
@@ -389,6 +364,7 @@ with tabs[1]:
                     use_container_width=True,
                 )
 
+                # Family + Category distribution
                 df["family_category"] = df["family"] + " → " + df["category1"]
                 fc_counts = df["family_category"].value_counts().reset_index()
                 fc_counts.columns = ["family_category", "count"]
@@ -399,7 +375,13 @@ with tabs[1]:
                     use_container_width=True,
                 )
 
-st.markdown("</div>", unsafe_allow_html=True)
+                # Low confidence flag
+                low = df[df["confidence"] < conf_floor]
+                if not low.empty:
+                    st.warning(f"{len(low)} item(s) below confidence threshold {conf_floor:.2f} — consider manual review.")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
 
 
 

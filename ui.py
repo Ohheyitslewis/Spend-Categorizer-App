@@ -76,7 +76,7 @@ html, body, [data-testid="stAppViewContainer"] {{
     color: #ffffff;
 }}
 
-/* Section card */
+/* Section card (no longer used for tabs, but kept in case you want it later) */
 .section-card {{
     background: rgba(15,23,42,0.9);
     border-radius: 20px;
@@ -88,15 +88,49 @@ html, body, [data-testid="stAppViewContainer"] {{
 
 /* Tabs */
 [data-baseweb="tab-list"] {{
-    gap: 0.5rem;
-}}
-button[role="tab"] {{
-    border-radius: 999px !important;
+    gap: 0.75rem;
+    justify-content: center;
+    margin-top: 0.75rem;
+    margin-bottom: 0.75rem;
+    overflow: visible !important;   /* allow hover lift without clipping */
 }}
 
-/* Force tab text to white */
+button[role="tab"] {{
+    border-radius: 999px !important;
+    padding: 0.35rem 1.4rem !important;
+    background: rgba(15,23,42,0.55) !important;
+    border: 1px solid rgba(148,163,184,0.8) !important;
+    box-shadow: 0 8px 18px rgba(15,23,42,0.65);
+    cursor: pointer;
+    transition:
+        background 0.15s ease,
+        transform 0.1s ease,
+        box-shadow 0.15s ease,
+        border-color 0.15s ease;
+}}
+
+button[role="tab"]:hover {{
+    background: rgba(15,23,42,0.85) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 12px 24px rgba(15,23,42,0.75);
+}}
+
+button[role="tab"][aria-selected="true"] {{
+    background: {ACCENT} !important;
+    border-color: {ACCENT} !important;
+    transform: translateY(-1px);
+    box-shadow: 0 12px 26px rgba(0,0,0,0.55);
+}}
+
 button[role="tab"] > div[data-testid="stMarkdownContainer"] p {{
-    color: #ffffff !important;
+    color: #e5e7eb !important;
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 0 !important;
+}}
+
+button[role="tab"][aria-selected="true"] > div[data-testid="stMarkdownContainer"] p {{
+    color: #0f172a !important;
 }}
 
 /* Inputs */
@@ -190,8 +224,6 @@ tab_single, tab_batch = st.tabs(["🔹 Single Item", "📦 Batch (Paste or Uploa
 #  SINGLE ITEM TAB
 # ============================================================
 with tab_single:
-    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-
     st.markdown("#### Classify a single line item")
     desc = st.text_area(
         "Item Description",
@@ -227,8 +259,6 @@ with tab_single:
             st.markdown("**Rationale**")
             st.write(res.rationale)
 
-    st.markdown("</div>", unsafe_allow_html=True)
-
     # Optional similar examples
     if HAS_EXAMPLES and desc.strip():
         try:
@@ -252,8 +282,6 @@ with tab_single:
 #  BATCH TAB (PASTE OR FILE UPLOAD)
 # ============================================================
 with tab_batch:
-    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-
     st.markdown("#### Classify many items at once")
 
     mode = st.radio(
@@ -380,7 +408,6 @@ with tab_batch:
                 if not low.empty:
                     st.warning(f"{len(low)} item(s) below confidence threshold {conf_floor:.2f} — consider manual review.")
 
-    st.markdown("</div>", unsafe_allow_html=True)
 
 
 

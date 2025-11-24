@@ -23,7 +23,7 @@ except Exception:
 
 
 # ============================================================
-#  PAGE SETUP
+#  PAGE SETUP (must be first Streamlit call)
 # ============================================================
 st.set_page_config(
     page_title="SpendPilot AI",
@@ -35,7 +35,58 @@ st.set_page_config(
 PRIMARY_BG = "#1c2a51"   # your dark blue
 ACCENT = "#e2551c"       # your orange
 
-# Global style
+
+# ============================================================
+#  SIMPLE USERNAME + PASSWORD LOGIN
+# ============================================================
+def check_credentials():
+    """
+    Simple username/password auth using st.secrets.
+
+    Expected structure in .streamlit/secrets.toml:
+
+    [users]
+    lewis = "password1"
+    manager = "password2"
+    """
+
+    # Already authenticated in this session?
+    if st.session_state.get("auth_ok"):
+        return True
+
+    st.markdown("### 🔐 Login")
+
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    login_col, _ = st.columns([1, 3])
+    with login_col:
+        login_clicked = st.button("Log in")
+
+    if login_clicked:
+        users = st.secrets.get("users", {})
+        if username in users and password == users[username]:
+            st.session_state["auth_ok"] = True
+            st.success("Logged in successfully.")
+            return True
+        else:
+            st.session_state["auth_ok"] = False
+            st.error("Invalid username or password.")
+
+    # Not authenticated yet → stop rendering the rest of the app
+    if not st.session_state.get("auth_ok", False):
+        st.stop()
+
+    return True
+
+
+# Call auth gate before the rest of the app renders
+check_credentials()
+
+
+# ============================================================
+#  GLOBAL STYLE
+# ============================================================
 st.markdown(f"""
 <style>
 /* Hide Streamlit default header/footer */
@@ -76,7 +127,7 @@ html, body, [data-testid="stAppViewContainer"] {{
     color: #ffffff;
 }}
 
-/* Section card (no longer used for tabs, but kept in case you want it later) */
+/* Section card (kept if you want to reuse later) */
 .section-card {{
     background: rgba(15,23,42,0.9);
     border-radius: 20px;
@@ -407,6 +458,7 @@ with tab_batch:
                 low = df[df["confidence"] < conf_floor]
                 if not low.empty:
                     st.warning(f"{len(low)} item(s) below confidence threshold {conf_floor:.2f} — consider manual review.")
+
 
 
 

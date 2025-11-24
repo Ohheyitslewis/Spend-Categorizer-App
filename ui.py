@@ -50,8 +50,13 @@ def check_credentials():
     manager = "password2"
     """
 
+    # Initialize auth state once
+    if "auth_ok" not in st.session_state:
+        st.session_state["auth_ok"] = False
+        st.session_state["username"] = None
+
     # Already authenticated in this session?
-    if st.session_state.get("auth_ok"):
+    if st.session_state["auth_ok"]:
         return True
 
     st.markdown("### 🔐 Login")
@@ -64,23 +69,32 @@ def check_credentials():
         login_clicked = st.button("Log in")
 
     if login_clicked:
-        users = st.secrets.get("users", {})
-        if username in users and password == users[username]:
+        # Load users from secrets
+        try:
+            users = st.secrets["users"]
+        except Exception:
+            st.error("No [users] section found in secrets.toml. Please configure credentials.")
+            st.stop()
+
+        # users is a mapping: username -> password
+        expected_password = users.get(username)
+
+        if expected_password is not None and password == expected_password:
             st.session_state["auth_ok"] = True
+            st.session_state["username"] = username
             st.success("Logged in successfully.")
-            return True
+            st.rerun()  # clear the login form and render the app
         else:
-            st.session_state["auth_ok"] = False
             st.error("Invalid username or password.")
 
-    # Not authenticated yet → stop rendering the rest of the app
-    if not st.session_state.get("auth_ok", False):
+    # If still not authenticated, stop rendering the rest of the app
+    if not st.session_state["auth_ok"]:
         st.stop()
 
     return True
 
 
-# Call auth gate before the rest of the app renders
+# Call auth gate before rendering the main app UI
 check_credentials()
 
 
